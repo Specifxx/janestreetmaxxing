@@ -16,7 +16,9 @@ const sigmoid = (z: number) => 1 / (1 + Math.exp(-z));
 // from short-term technical factors. Weights are hand-tuned priors, not fit —
 // they encode well-documented short-horizon tendencies (trend persistence,
 // mild mean-reversion from oversold, MACD turns).
-function shortTermBull(
+//
+// Exported so the backtest harness can exercise the exact production logic.
+export function shortTermBull(
   snapshot: Snapshot,
   ind: Indicators,
   history: OHLC[],
