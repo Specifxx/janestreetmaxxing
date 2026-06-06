@@ -50,7 +50,8 @@ function valueScore(f: Fundamentals, pt: PriceTargets): ScoreComponent {
 }
 
 // ---- Momentum (trend + RSI + recent returns) ------------------------------
-function momentumScore(ind: Indicators, price: number): ScoreComponent {
+// Exported so the monthly backtest can exercise the real factor logic.
+export function momentumScore(ind: Indicators, price: number): ScoreComponent {
   let score = 50;
   const bits: string[] = [];
   if (ind.sma50 && ind.sma200) {
@@ -116,7 +117,7 @@ function qualityScore(f: Fundamentals): ScoreComponent {
 }
 
 // ---- Technicals (MACD, Bollinger position, distance from 52w high) --------
-function technicalScore(ind: Indicators, price: number): ScoreComponent {
+export function technicalScore(ind: Indicators, price: number): ScoreComponent {
   let score = 50;
   const bits: string[] = [];
   if (ind.macdHist != null) {

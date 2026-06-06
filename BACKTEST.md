@@ -61,6 +61,35 @@ Predicting UP when **P(up) ≤ ~0.39**: **53.77%** hit-rate (n=104,082), **+1.74
 over base rate. A small but real reversal edge — *the opposite* of how the model
 is currently wired.
 
+## Monthly horizon — "predict next month's direction"
+
+Same discipline, longer horizon: to predict calendar month *M*, the model sees
+**only** the trailing 252 sessions up to the last trading day of month *M-1*;
+months are **non-overlapping** (independent samples). It uses the app's
+**price-based factors** — `(Momentum·0.25 + Technicals·0.15)/0.40` — exercised
+through the real `momentumScore`/`technicalScore` code. (The Value & Quality
+factors aren't included: they need point-in-time fundamentals we don't have.)
+
+- **Sample:** 23,477 ticker-months, 499 tickers.
+- **Base rate (month closed up):** **55.77%** (2013-18 was a strong bull market).
+
+| predict UP when score ≥ | calls | accuracy | edge vs base |
+|------------------------:|------:|---------:|-------------:|
+| 50 | 15,538 | 55.73% | −0.03 pp |
+| 55 | 11,559 | 54.81% | −0.96 pp |
+| 60 |  9,913 | 54.72% | −1.05 pp |
+| 65 |  6,292 | 54.07% | −1.70 pp |
+
+**Overall directional accuracy (up if score ≥ 50, else down): ~51.8%** — *worse*
+than the 55.8% you'd get by assuming every month is up (**−3.9 pp**). When the
+model flags a month bearish (score < 50), the month still rose 55.8% of the time
+— its bearish calls are uninformative.
+
+Calibration is again **inverted**: the lowest-momentum bin (score ~30) had the
+*highest* forward return (**+1.48%/month**, 56.9% up) while the highest bins
+(60-70) returned ~0.55%/month — the medium-term reversal effect showing up at
+monthly horizon too.
+
 ## Honest conclusion
 
 1. **As-built, the ODTE direction model is not predictive** (≈51% ≈ coin flip,
