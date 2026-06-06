@@ -33,8 +33,8 @@ export default function StockPage({ params }: { params: Promise<{ symbol: string
     return (
       <div className="panel p-8 text-center">
         <p className="text-[var(--color-down)]">Could not analyse {symbol}: {err}</p>
-        <Link href="/" className="text-[var(--color-accent)] text-sm mt-3 inline-block">
-          ← Back to screener
+        <Link href="/terminal" className="text-[var(--color-accent)] text-sm mt-3 inline-block">
+          ← Back to terminal
         </Link>
       </div>
     );
@@ -54,8 +54,8 @@ export default function StockPage({ params }: { params: Promise<{ symbol: string
 
   return (
     <div className="space-y-6">
-      <Link href="/" className="text-sm text-[var(--color-muted)] hover:text-[var(--color-text)]">
-        ← Screener
+      <Link href="/terminal" className="text-sm text-[var(--color-muted)] hover:text-[var(--color-text)]">
+        ← Terminal
       </Link>
 
       {/* Header */}

@@ -49,7 +49,10 @@ export default function ODTEPage() {
   return (
     <div className="space-y-6">
       <section className="panel p-6 sm:p-8">
-        <h1 className="text-3xl font-bold tracking-tight">ODTE — 1-2 Day Upside Radar</h1>
+        <div className="text-xs font-medium tracking-widest text-[var(--bs-gold)] uppercase mb-2">
+          Bill Street · ODTE Desk
+        </div>
+        <h1 className="text-3xl font-bold tracking-tight">1–2 Day Upside Radar</h1>
         <p className="text-[var(--color-muted)] mt-2 max-w-3xl">
           Ranks names by a transparent <span className="text-[var(--color-text)]">probability-of-up</span> model
           (trend, MACD, RSI zone, prior-day close strength) against their{" "}
