@@ -160,36 +160,45 @@ export async function analyzeSymbol(symbol: string): Promise<StockAnalysis> {
   return { ...partial, reasoning, risks };
 }
 
+// Build a compact screen row for a single symbol (used by the screener, the
+// quotes endpoint and the portfolio desk).
+export async function screenSymbol(symbol: string): Promise<ScreenResult> {
+  const raw = await loadRaw(symbol, false);
+  const indicators = computeIndicators(raw.history);
+  const valuations = buildValuations(raw.fundamentals);
+  const priceTargets = blendPriceTargets(valuations, raw.snapshot, indicators);
+  const components = buildComponents(raw.fundamentals, indicators, priceTargets, raw.snapshot);
+  const compositeScore = composite(components);
+  const recommendation = recommend(compositeScore, priceTargets.upsidePct);
+  const top = [...components].sort((a, b) => b.score - a.score)[0];
+  return {
+    symbol: raw.snapshot.symbol,
+    name: raw.snapshot.name,
+    market: raw.snapshot.market,
+    price: raw.snapshot.price,
+    changePct: raw.snapshot.changePct,
+    compositeScore,
+    recommendation,
+    upsidePct: priceTargets.upsidePct,
+    rsi14: indicators.rsi14,
+    targetBase: priceTargets.base,
+    topReason: `${top.label}: ${top.detail}`,
+    dataSource: raw.dataSource,
+  };
+}
+
+// Quote an arbitrary list of symbols (for the portfolio / watchlist desk).
+export async function quoteMany(symbols: string[]): Promise<ScreenResult[]> {
+  const clean = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))].slice(0, 60);
+  return mapPool(clean, 6, (s) => screenSymbol(s));
+}
+
 export async function screenMarket(
   market: Market | "all",
   limit = 50,
 ): Promise<ScreenResult[]> {
   const universe = universeFor(market).slice(0, limit);
-  const rows = await mapPool(universe, 6, async (u) => {
-    const raw = await loadRaw(u.symbol, false);
-    const indicators = computeIndicators(raw.history);
-    const valuations = buildValuations(raw.fundamentals);
-    const priceTargets = blendPriceTargets(valuations, raw.snapshot, indicators);
-    const components = buildComponents(raw.fundamentals, indicators, priceTargets, raw.snapshot);
-    const compositeScore = composite(components);
-    const recommendation = recommend(compositeScore, priceTargets.upsidePct);
-    const top = [...components].sort((a, b) => b.score - a.score)[0];
-    const row: ScreenResult = {
-      symbol: raw.snapshot.symbol,
-      name: raw.snapshot.name,
-      market: raw.snapshot.market,
-      price: raw.snapshot.price,
-      changePct: raw.snapshot.changePct,
-      compositeScore,
-      recommendation,
-      upsidePct: priceTargets.upsidePct,
-      rsi14: indicators.rsi14,
-      targetBase: priceTargets.base,
-      topReason: `${top.label}: ${top.detail}`,
-      dataSource: raw.dataSource,
-    };
-    return row;
-  });
+  const rows = await mapPool(universe, 6, (u) => screenSymbol(u.symbol));
   return rows.sort((a, b) => b.compositeScore - a.compositeScore);
 }
 

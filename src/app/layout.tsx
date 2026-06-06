@@ -30,6 +30,7 @@ function Nav() {
         <div className="hidden md:flex items-center gap-1 text-sm">
           <Link href="/terminal" className={link}>Terminal</Link>
           <Link href="/odte" className={link}>ODTE Desk</Link>
+          <Link href="/portfolio" className={link}>Book</Link>
           <Link href="/research" className={link}>Research</Link>
           <Link href="/about" className={link}>Firm</Link>
         </div>
@@ -68,6 +69,7 @@ export default function RootLayout({
               <div className="font-medium text-[var(--color-text)]">Platform</div>
               <Link href="/terminal" className="block hover:text-[var(--color-text)]">Terminal</Link>
               <Link href="/odte" className="block hover:text-[var(--color-text)]">ODTE Desk</Link>
+              <Link href="/portfolio" className="block hover:text-[var(--color-text)]">Portfolio &amp; Book</Link>
               <Link href="/research" className="block hover:text-[var(--color-text)]">Research &amp; Backtests</Link>
               <Link href="/about" className="block hover:text-[var(--color-text)]">The Firm</Link>
             </div>
