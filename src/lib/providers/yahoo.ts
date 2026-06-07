@@ -14,6 +14,14 @@ const UA =
 
 const BASES = ["https://query1.finance.yahoo.com", "https://query2.finance.yahoo.com"];
 
+// Fast-fail timeout so a slow/blocked upstream can never hang a serverless
+// function (which would otherwise burn the whole request budget on Vercel).
+const FETCH_TIMEOUT_MS = 7000;
+function timeoutSignal(ms = FETCH_TIMEOUT_MS): AbortSignal {
+  // AbortSignal.timeout is available on Node 18+/modern runtimes.
+  return AbortSignal.timeout(ms);
+}
+
 let crumbCache: { crumb: string; cookie: string } | null = null;
 
 async function getCrumb(): Promise<{ crumb: string; cookie: string }> {
@@ -22,6 +30,7 @@ async function getCrumb(): Promise<{ crumb: string; cookie: string }> {
   const res = await fetch("https://fc.yahoo.com", {
     headers: { "User-Agent": UA },
     redirect: "manual",
+    signal: timeoutSignal(),
   }).catch(() => null);
   let cookie = "";
   if (res) {
@@ -31,6 +40,7 @@ async function getCrumb(): Promise<{ crumb: string; cookie: string }> {
   // 2. Exchange cookie for a crumb.
   const cr = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
     headers: { "User-Agent": UA, ...(cookie ? { Cookie: cookie } : {}) },
+    signal: timeoutSignal(),
   });
   const crumb = (await cr.text()).trim();
   crumbCache = { crumb, cookie };
@@ -48,7 +58,7 @@ async function getJSON(path: string, withCrumb = false): Promise<unknown> {
         if (cookie) headers.Cookie = cookie;
         url += (url.includes("?") ? "&" : "?") + "crumb=" + encodeURIComponent(crumb);
       }
-      const res = await fetch(url, { headers });
+      const res = await fetch(url, { headers, signal: timeoutSignal() });
       if (!res.ok) {
         lastErr = new Error(`${res.status} ${url}`);
         continue;

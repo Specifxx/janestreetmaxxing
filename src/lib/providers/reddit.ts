@@ -23,6 +23,7 @@ async function fetchSub(sub: string): Promise<SubPost[]> {
   try {
     const res = await fetch(`https://www.reddit.com/r/${sub}/hot.json?limit=100`, {
       headers: { "User-Agent": UA },
+      signal: AbortSignal.timeout(7000),
     });
     if (!res.ok) return [];
     const data = (await res.json()) as any;
