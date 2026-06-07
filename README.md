@@ -60,6 +60,27 @@ npm run build && npm run start
 
 Requires Node 18+. No API keys needed.
 
+## Deploy for free (~2 minutes) — get a shareable `*.vercel.app` URL
+
+This app uses server-side API routes, so it needs a host that runs Next.js
+functions. **Vercel's Hobby tier is free and ideal** (Netlify also works).
+
+1. Go to **https://vercel.com** and sign in **with GitHub**.
+2. Click **Add New… → Project**, then **Import** the `Specifxx/janestreetmaxxing`
+   repository. (Production branch is `main` — already set.)
+3. Framework preset auto-detects **Next.js**. No env vars or build settings to
+   change. Click **Deploy**.
+4. ~1 minute later you get a public URL like `https://billstreet-xxx.vercel.app`
+   to share. Rename the project to `billstreet` in **Settings → General** for a
+   cleaner `https://billstreet.vercel.app`.
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Specifxx/janestreetmaxxing)
+
+**Live data on the deployed site:** Vercel's network is open, so it fetches real
+US + ASX prices from Yahoo. If Yahoo rate-limits the cloud IP, the app falls back
+to the clearly-labelled **SAMPLE DATA** badge — the site still works, it just
+isn't live in that moment.
+
 ## Stack
 
 Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS v4 · Recharts.
