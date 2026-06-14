@@ -165,6 +165,17 @@ export default function Home() {
               out names that have already made their move.
             </p>
           </Link>
+          <Link href="/orb" className="bs-card p-6 hover:border-[var(--color-accent)] transition group">
+            <div className="flex justify-between items-start">
+              <div className="font-semibold text-lg">ASX200 ORB Signaller</div>
+              <span className="text-[var(--color-accent)] group-hover:translate-x-1 transition">→</span>
+            </div>
+            <p className="text-sm text-[var(--color-muted)] mt-2">
+              A guided 5-factor opening-range-breakout checklist for ASX day trades — live overnight
+              macro gate, intraday confirmation, a conditional win-rate stack and a hard GO / NO-TRADE
+              verdict with leverage-aware risk sizing.
+            </p>
+          </Link>
           <Link href="/stock/NVDA" className="bs-card p-6 hover:border-[var(--color-accent)] transition group">
             <div className="flex justify-between items-start">
               <div className="font-semibold text-lg">Single-name research</div>

@@ -20,6 +20,7 @@ its working**.
 | **/** Screener | Ranked opportunities across US/ASX with composite score, recommendation, blended price target, upside %, and the top driving factor. Search any symbol (`AAPL`, `BHP.AX`). |
 | **/stock/[symbol]** | Full report: score ring, factor breakdown, 6-month price chart with bull/base/bear target lines, four valuation models **with formulas + inputs**, key stats, bullish reasoning, and risks. |
 | **/odte** | 1–2 day upside radar: probability-of-up model, expected daily move from implied vol, suggested target, **remaining headroom**, and an "already moved" exclusion list. |
+| **/orb** | ASX200 pre-bell **opening-range-breakout** signaller: a guided 5-factor checklist (live overnight macro gate + intraday confirmation), the conditional win-rate stack, a hard **GO / NO-TRADE** verdict, and a leverage-aware position/risk calculator with an honest ruin reality-check. |
 | **/methodology** | Every formula and weight, written out. |
 
 ## The models (see `/methodology` in-app for full detail)
