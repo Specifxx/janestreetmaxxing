@@ -234,7 +234,7 @@ export class IGBroker implements Broker {
       );
     }
 
-    const order = {
+    const order: Record<string, unknown> = {
       epic: this.opts.epic,
       expiry: "-",
       direction: plan.direction === "long" ? "BUY" : "SELL",
@@ -243,9 +243,11 @@ export class IGBroker implements Broker {
       guaranteedStop: false,
       forceOpen: true,
       currencyCode: this.opts.currency ?? "AUD",
-      stopLevel: round(plan.stopPrice),
-      limitLevel: round(plan.baseTpPrice),
+      stopLevel: round(plan.stopPrice), // protective stop always attached
     };
+    // Fixed take-profit only for bracket strategies; flip-exit strategies (HA)
+    // omit it so the trend can run, and are closed actively by the caller.
+    if (plan.useLimit) order.limitLevel = round(plan.baseTpPrice);
 
     if (this.dryRun) {
       console.log(`[IG ${this.mode} DRY-RUN] Would place order:`, JSON.stringify(order));
@@ -282,8 +284,51 @@ export class IGBroker implements Broker {
       runnerTpPrice: plan.runnerTpPrice,
     };
   }
+  // Open positions (optionally filtered to one epic) — used for flip-exit
+  // management. Direction is normalised to long/short.
+  async getOpenPositions(
+    epic?: string,
+  ): Promise<{ dealId: string; direction: "long" | "short"; size: number; epic: string; level: number }[]> {
+    await this.login();
+    const res = await fetch(`${this.base}/positions`, { headers: this.headers("2") });
+    if (!res.ok) throw new Error(`IG /positions failed: ${res.status}`);
+    const body: any = await res.json();
+    return (body.positions ?? [])
+      .map((p: any) => ({
+        dealId: p.position?.dealId,
+        direction: p.position?.direction === "BUY" ? "long" : "short",
+        size: p.position?.size ?? p.position?.dealSize ?? 0,
+        epic: p.market?.epic,
+        level: p.position?.level ?? 0,
+      }))
+      .filter((p: any) => (epic ? p.epic === epic : true));
+  }
+
+  // Close an open position at market (opposite-direction deal). Honours dry-run.
+  async closePosition(pos: { dealId: string; direction: "long" | "short"; size: number }): Promise<string> {
+    await this.login();
+    const body = {
+      dealId: pos.dealId,
+      direction: pos.direction === "long" ? "SELL" : "BUY",
+      size: pos.size,
+      orderType: "MARKET",
+    };
+    if (this.dryRun) {
+      console.log(`[IG ${this.mode} DRY-RUN] Would CLOSE position ${pos.dealId}`);
+      return "dryrun-close";
+    }
+    const res = await fetch(`${this.base}/positions/otc`, {
+      method: "POST",
+      headers: { ...this.headers("1"), _method: "DELETE" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`IG close failed: ${res.status} ${await res.text()}`);
+    const { dealReference } = (await res.json()) as any;
+    return dealReference ?? "closed";
+  }
+
   closeInfo() {
-    return "live exits run broker-side via the attached OCO stop + limit (verify on demo). Runner scale-out is not yet automated.";
+    return "stop is broker-side; profit exit is active (HA flip-exit) or the attached limit (bracket). Verify on demo.";
   }
 }
 

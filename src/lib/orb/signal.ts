@@ -35,6 +35,7 @@ export interface SignalResult {
   orb: { high: number; low: number } | null;
   entryPrice: number | null;
   reason: string;
+  trend?: "up" | "down" | "none"; // unused by ORB; present so the strategy union is uniform
 }
 
 const MACRO_TH = { wallSt: 0.5, aud: 0.3, iron: 0.8 };

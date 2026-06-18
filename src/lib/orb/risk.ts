@@ -47,6 +47,7 @@ export interface TradePlan {
   notional: number; // dollar exposure (equity-at-risk * leverage-ish)
   marginUsed: number; // cash the position ties up
   maxLossDollar: number; // expected loss if stopped
+  useLimit: boolean; // attach a fixed take-profit? (false = let it run, e.g. HA flip-exit)
 }
 
 export function preTradeCheck(state: RiskState, cfg: RiskConfig): { ok: boolean; reason: string } {
@@ -65,6 +66,7 @@ export function buildTradePlan(
   entryPrice: number,
   state: RiskState,
   cfg: RiskConfig,
+  useLimit = true,
 ): TradePlan {
   const dirMul = direction === "long" ? 1 : -1;
   const stopPrice = entryPrice * (1 - dirMul * (cfg.stopMovePct / 100));
@@ -78,7 +80,7 @@ export function buildTradePlan(
   const notional = capitalAtRisk * cfg.leverage;
   const marginUsed = notional / cfg.leverage;
 
-  return { direction, entryPrice, stopPrice, baseTpPrice, runnerTpPrice, notional, marginUsed, maxLossDollar };
+  return { direction, entryPrice, stopPrice, baseTpPrice, runnerTpPrice, notional, marginUsed, maxLossDollar, useLimit };
 }
 
 // Apply a settled trade outcome to the risk state.

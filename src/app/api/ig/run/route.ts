@@ -69,22 +69,50 @@ export async function POST(request: Request) {
     }
 
     const cfg = { ...DEFAULT_RISK, riskFractionOfEquity: b.riskFraction ?? DEFAULT_RISK.riskFractionOfEquity };
-    const check = preTradeCheck(state, cfg);
+    const epic = b.epic || "IX.D.ASX.IFD.IP";
+    const flipExit = strategy === "heikinashi"; // HA rides the trend, exits on the reverse flip
 
     let action = "no-trade";
     let detail = sig.reason;
     let order = null;
+    const exits: string[] = [];
 
+    // 1. FLIP-EXIT: when actually managing real positions, close any open
+    //    position whose direction is now against the current HA trend.
+    if (flipExit && sendRealOrders && sig.trend && sig.trend !== "none") {
+      try {
+        const open = await broker.getOpenPositions(epic);
+        for (const p of open) {
+          const against = (p.direction === "long" && sig.trend === "down") || (p.direction === "short" && sig.trend === "up");
+          if (against) {
+            await broker.closePosition(p);
+            exits.push(`closed ${p.direction} ${p.dealId} on HA flip to ${sig.trend}`);
+          }
+        }
+        // reflect remaining open positions in the risk guardrail
+        state.openTrades = (await broker.getOpenPositions(epic)).filter(
+          (p) => !((p.direction === "long" && sig.trend === "down") || (p.direction === "short" && sig.trend === "up")),
+        ).length;
+      } catch (e) {
+        exits.push(`exit-check failed: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+    if (exits.length) { action = "flip-exit"; detail = exits.join("; "); }
+
+    const check = preTradeCheck(state, cfg);
+
+    // 2. ENTRY: open on a fresh signal if flat. HA uses a stop only (no fixed
+    //    take-profit) so the flip-exit can let winners run.
     if (sig.allGo && sig.direction !== "none" && sig.entryPrice != null) {
       if (!check.ok) {
-        action = "blocked";
-        detail = `Signal GO but blocked by risk guardrail: ${check.reason}`;
+        action = exits.length ? action : "blocked";
+        detail = exits.length ? `${detail}; entry blocked: ${check.reason}` : `Signal GO but blocked: ${check.reason}`;
       } else {
-        const plan = buildTradePlan(sig.direction, sig.entryPrice, state, cfg);
+        const plan = buildTradePlan(sig.direction, sig.entryPrice, state, cfg, !flipExit);
         try {
           const pos = await broker.openPosition(plan);
           action = broker.mode === "live" && sendRealOrders ? "live-order" : sendRealOrders ? "demo-order" : "dry-run";
-          detail = `${action}: ${sig.direction.toUpperCase()} @ ${sig.entryPrice} (id ${pos.id})`;
+          detail = `${exits.length ? detail + "; " : ""}${action}: ${sig.direction.toUpperCase()} @ ${sig.entryPrice} (id ${pos.id})${flipExit ? " [stop only, flip-exit]" : ""}`;
           order = { ...plan, id: pos.id };
         } catch (e) {
           action = "order-error";

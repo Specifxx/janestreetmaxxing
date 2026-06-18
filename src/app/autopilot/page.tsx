@@ -246,7 +246,7 @@ export default function AutopilotPage() {
           <button onClick={toggleAuto} disabled={!canRun && !auto}
             className={`px-5 py-2.5 rounded-lg font-semibold border transition ${
               auto ? "bg-[var(--color-down)] border-[var(--color-down)] text-white" : "panel-2 border-[var(--color-border)] text-[var(--color-text)]"}`}>
-            {auto ? "■ Stop auto-run" : "▶ Auto-run every 5 min"}
+            {auto ? "■ Stop auto-run" : `▶ Auto-run every ${pollMin} min`}
           </button>
           {auto && <span className="text-xs text-[var(--color-up)] animate-pulse">● running — keep this tab open</span>}
         </div>

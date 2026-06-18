@@ -17,6 +17,7 @@ export interface StrategySignal {
   prob: number; // here: heuristic SIGNAL STRENGTH 0–100 (NOT a claimed win rate)
   entryPrice: number | null;
   reason: string;
+  trend?: "up" | "down" | "none"; // current HA candle colour (for flip-exit)
 }
 
 interface HABar {
@@ -65,7 +66,7 @@ const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x
 
 export function evaluateHeikinAshi(bars: Bar5m[]): StrategySignal {
   if (bars.length < 12) {
-    return { direction: "none", factors: [], allGo: false, prob: 0, entryPrice: null, reason: "Not enough bars yet" };
+    return { direction: "none", factors: [], allGo: false, prob: 0, entryPrice: null, reason: "Not enough bars yet", trend: "none" };
   }
   const ha = heikinAshi(bars);
   const vo = volumeOscillator(bars);
@@ -109,6 +110,7 @@ export function evaluateHeikinAshi(bars: Bar5m[]): StrategySignal {
     direction,
     factors,
     allGo,
+    trend: curGreen ? "up" : "down",
     prob: allGo ? Math.round(strength) : 0,
     entryPrice: allGo ? bars[n].close : null,
     reason: allGo
