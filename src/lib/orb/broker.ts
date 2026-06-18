@@ -146,6 +146,40 @@ export class IGBroker implements Broker {
     return { equity: balance, currency: acct?.currency ?? this.opts.currency ?? "AUD", mode: this.mode };
   }
 
+  // Read the instrument's dealing rules so you can see — from IG's own data —
+  // whether your account is even big enough to trade it at sane risk.
+  async marketInfo(): Promise<{
+    name: string;
+    price: number;
+    minDealSize: number;
+    marginFactorPct: number | null;
+    minExposure: number;
+    minMargin: number | null;
+    minStopRiskAt1pct: number;
+  }> {
+    await this.login();
+    const res = await fetch(`${this.base}/markets/${encodeURIComponent(this.opts.epic)}`, {
+      headers: this.headers("3"),
+    });
+    if (!res.ok) throw new Error(`IG /markets failed: ${res.status}`);
+    const m: any = await res.json();
+    const price = m?.snapshot?.offer ?? 0;
+    const minDealSize = m?.dealingRules?.minDealSize?.value ?? 1;
+    const marginFactorPct =
+      m?.instrument?.marginDepositBands?.[0]?.margin ??
+      (typeof m?.instrument?.marginFactor === "number" ? m.instrument.marginFactor : null);
+    const minExposure = minDealSize * price;
+    return {
+      name: m?.instrument?.name ?? this.opts.epic,
+      price,
+      minDealSize,
+      marginFactorPct,
+      minExposure,
+      minMargin: marginFactorPct != null ? minExposure * (marginFactorPct / 100) : null,
+      minStopRiskAt1pct: minExposure * 0.01,
+    };
+  }
+
   async openPosition(plan: TradePlan): Promise<Position> {
     await this.login();
 

@@ -35,7 +35,21 @@ async function main() {
   try {
     const acct = await broker.getAccount();
     console.log(`✓ Connected. Balance: ${acct.equity} ${acct.currency}`);
-    console.log("  Login + account read work. Next: verify a tiny order on demo (see AUTOMATION.md).");
+
+    // Show the REAL minimum-trade economics for this instrument so you can see
+    // whether $100 / $500 can actually carry one sane position.
+    const mi = await broker.marketInfo();
+    console.log(`\nInstrument: ${mi.name} @ ${mi.price}`);
+    console.log(`  Min deal size: ${mi.minDealSize}  →  min exposure ≈ $${mi.minExposure.toFixed(0)}`);
+    if (mi.minMargin != null)
+      console.log(`  Margin to open one min position ≈ $${mi.minMargin.toFixed(0)} (factor ${mi.marginFactorPct}%)`);
+    console.log(`  A 1% stop on that min position risks ≈ $${mi.minStopRiskAt1pct.toFixed(0)}`);
+    for (const cap of [100, 500]) {
+      const canOpen = mi.minMargin == null ? "unknown" : mi.minMargin <= cap ? "YES" : "NO — margin exceeds deposit";
+      const riskPct = (mi.minStopRiskAt1pct / cap) * 100;
+      console.log(`  With $${cap}: can open one min trade? ${canOpen} | one 1% stop = ${riskPct.toFixed(0)}% of account`);
+    }
+    console.log("\n  Login + reads work. Next: verify a tiny order on demo (see AUTOMATION.md).");
   } catch (e) {
     console.error(`✗ ${e instanceof Error ? e.message : e}`);
     console.error("  If this is a network error, run on a normal connection (this sandbox blocks egress).");
