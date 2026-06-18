@@ -117,6 +117,21 @@ account.
 
 ---
 
+## C. One-click in the app (`/autopilot`)
+
+For a no-terminal flow: `npm run dev`, open **http://localhost:3000/autopilot**.
+```
+1 · Connect   [IG API key][username][password][epic]  (Demo ◉ / Live ○)  [Connect]
+              ✓ Connected · 10000 AUD · mode paper
+              Australia 200 @ 7800 · min exposure ≈ $3900 · margin ≈ $195 …
+2 · Arm & run  ☐ Actually place orders   ▶ Auto-run every 5 min
+3 · Activity   time | mode | win-rate | action | detail
+```
+- **Defaults to Demo.** Live + "place orders" makes you type a confirmation
+  phrase first.
+- **Run it locally** — don't paste live broker credentials into a hosted site.
+- Auto-run works only while the tab is open; **24/7 needs the CLI bot** (Section B).
+
 ## The one rule
 
 > **Green GO is necessary, not sufficient. The journal's measured win rate is the

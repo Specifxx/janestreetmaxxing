@@ -81,6 +81,9 @@ interface IGOpts {
   live: boolean;
   epic: string; // IG instrument id for AUS200, e.g. "IX.D.ASX.IFD.IP" (verify in your account)
   currency?: string;
+  // Consent can be supplied explicitly (e.g. from a UI) or via env (CLI).
+  liveConfirmed?: boolean;
+  placeRealOrders?: boolean;
 }
 
 export class IGBroker implements Broker {
@@ -92,18 +95,19 @@ export class IGBroker implements Broker {
   private dryRun: boolean;
 
   constructor(private opts: IGOpts) {
-    const confirmed = process.env.LIVE_TRADING_CONFIRMED === "I_UNDERSTAND_I_CAN_LOSE_EVERYTHING";
+    const confirmed =
+      opts.liveConfirmed ?? process.env.LIVE_TRADING_CONFIRMED === "I_UNDERSTAND_I_CAN_LOSE_EVERYTHING";
     if (opts.live && !confirmed) {
       throw new Error(
-        "Refusing to start a LIVE broker without informed consent.\n" +
-          "Set env LIVE_TRADING_CONFIRMED=I_UNDERSTAND_I_CAN_LOSE_EVERYTHING to proceed,\n" +
-          "and ONLY after the strategy has shown a real positive edge on the demo account.",
+        "Live trading not confirmed. Real money requires explicit confirmation " +
+          "(type the confirmation phrase in the app, or set LIVE_TRADING_CONFIRMED), " +
+          "and only after the strategy has shown a real positive edge on the demo account.",
       );
     }
     this.mode = opts.live ? "live" : "paper";
     this.base = opts.live ? "https://api.ig.com/gateway/deal" : "https://demo-api.ig.com/gateway/deal";
     // Orders are dry-run unless explicitly armed, even on a confirmed live account.
-    this.dryRun = process.env.ORB_PLACE_REAL_ORDERS !== "yes";
+    this.dryRun = !(opts.placeRealOrders ?? process.env.ORB_PLACE_REAL_ORDERS === "yes");
   }
 
   private headers(version = "1"): Record<string, string> {

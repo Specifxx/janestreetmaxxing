@@ -31,6 +31,7 @@ function Nav() {
           <Link href="/terminal" className={link}>Terminal</Link>
           <Link href="/odte" className={link}>ODTE Desk</Link>
           <Link href="/orb" className={link}>ASX ORB</Link>
+          <Link href="/autopilot" className={link}>Autopilot</Link>
           <Link href="/portfolio" className={link}>Book</Link>
           <Link href="/research" className={link}>Research</Link>
           <Link href="/about" className={link}>Firm</Link>
