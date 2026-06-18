@@ -23,6 +23,12 @@ its working**.
 | **/orb** | ASX200 pre-bell **opening-range-breakout** signaller: a guided 5-factor checklist (live overnight macro gate + intraday confirmation), the conditional win-rate stack, a hard **GO / NO-TRADE** verdict, and a leverage-aware position/risk calculator with an honest ruin reality-check. |
 | **/methodology** | Every formula and weight, written out. |
 
+**Automated ORB bot:** [`AUTOMATION.md`](AUTOMATION.md) — a fully-automated,
+paper-trading-by-default ASX200 ORB bot (`scripts/orb-bot.ts`) with a signal
+engine, risk guardrails, a trade journal that measures your *real* win rate, and
+a gated path to live broker execution. Novice-friendly setup + honest risk
+considerations.
+
 **Backtests:** [`BACKTEST.md`](BACKTEST.md) (ODTE direction model) and
 [`ORB-BACKTEST.md`](ORB-BACKTEST.md) (the ASX200 ORB "$100→$1m" plan — a Monte
 Carlo stress-test + a real-data check of the overnight-macro base layer, with
