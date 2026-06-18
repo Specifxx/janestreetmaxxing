@@ -34,6 +34,7 @@ export async function fetch5m(symbol: string): Promise<Bar5m[]> {
     if (q.close?.[i] == null) continue;
     bars.push({
       time: sydneyISO(ts[i]),
+      open: q.open?.[i] ?? q.close[i],
       high: q.high?.[i] ?? q.close[i],
       low: q.low?.[i] ?? q.close[i],
       close: q.close[i],

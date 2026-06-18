@@ -13,6 +13,7 @@ export default function AutopilotPage() {
   const [password, setPassword] = useState("");
   const [epic, setEpic] = useState("IX.D.ASX.IFD.IP");
   const [live, setLive] = useState(false);
+  const [strategy, setStrategy] = useState<"orb" | "heikinashi">("orb");
 
   // ---- arming / consent ----
   const [sendRealOrders, setSendRealOrders] = useState(false);
@@ -47,7 +48,7 @@ export default function AutopilotPage() {
     try {
       const res = await fetch("/api/ig/run", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...creds, sendRealOrders, confirmPhrase }),
+        body: JSON.stringify({ ...creds, strategy, sendRealOrders, confirmPhrase }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
@@ -139,6 +140,26 @@ export default function AutopilotPage() {
       {/* ARM + RUN */}
       <section className="panel p-6 space-y-4">
         <h2 className="text-lg font-semibold">2 · Arm &amp; run</h2>
+        <div>
+          <div className="text-xs text-[var(--color-muted)] mb-1.5">Strategy</div>
+          <div className="flex flex-wrap gap-1.5">
+            {([
+              { v: "orb", label: "ASX200 ORB (5-factor)" },
+              { v: "heikinashi", label: "Heikin Ashi + Volume Osc." },
+            ] as const).map((s) => (
+              <button key={s.v} onClick={() => setStrategy(s.v)}
+                className={`px-3 py-1.5 rounded-lg text-sm border transition ${
+                  strategy === s.v ? "bg-[var(--color-accent)] border-[var(--color-accent)] text-white" : "panel-2 border-[var(--color-border)] text-[var(--color-muted)]"}`}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-[var(--color-muted)] mt-1.5">
+            {strategy === "orb"
+              ? "Opening-range breakout, one setup/day around 10:30 AEST."
+              : "Enters on a Heikin-Ashi trend flip confirmed by an expanding volume oscillator. Runs on the 5-min series throughout the session."}
+          </p>
+        </div>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={sendRealOrders} onChange={(e) => setSendRealOrders(e.target.checked)} />
           Actually place orders ({live ? "real money" : "real demo orders"}). Off = dry-run (logs the order, sends nothing).
@@ -178,7 +199,7 @@ export default function AutopilotPage() {
               <thead className="text-[var(--color-muted)] text-xs uppercase">
                 <tr className="border-b border-[var(--color-border)]">
                   <th className="text-left px-2 py-2">Time</th><th className="text-left px-2 py-2">Mode</th>
-                  <th className="text-right px-2 py-2">Win-rate</th><th className="text-left px-2 py-2">Action</th>
+                  <th className="text-right px-2 py-2">Signal</th><th className="text-left px-2 py-2">Action</th>
                   <th className="text-left px-2 py-2">Detail</th>
                 </tr>
               </thead>

@@ -124,7 +124,8 @@ For a no-terminal flow: `npm run dev`, open **http://localhost:3000/autopilot**.
 1 · Connect   [IG API key][username][password][epic]  (Demo ◉ / Live ○)  [Connect]
               ✓ Connected · 10000 AUD · mode paper
               Australia 200 @ 7800 · min exposure ≈ $3900 · margin ≈ $195 …
-2 · Arm & run  ☐ Actually place orders   ▶ Auto-run every 5 min
+2 · Arm & run  Strategy: [ASX200 ORB][Heikin Ashi + Volume Osc.]
+               ☐ Actually place orders   ▶ Auto-run every 5 min
 3 · Activity   time | mode | win-rate | action | detail
 ```
 - **Defaults to Demo.** Live + "place orders" makes you type a confirmation

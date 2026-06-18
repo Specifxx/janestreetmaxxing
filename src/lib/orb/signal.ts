@@ -11,6 +11,7 @@ import { rsi } from "@/lib/analysis/indicators";
 
 export interface Bar5m {
   time: string; // ISO timestamp of the bar OPEN
+  open?: number; // optional: needed by candle strategies (Heikin Ashi)
   high: number;
   low: number;
   close: number;

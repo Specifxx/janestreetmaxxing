@@ -1,6 +1,7 @@
 import { IGBroker } from "@/lib/orb/broker";
 import { assembleLiveSession } from "@/lib/orb/data";
 import { evaluateSignal } from "@/lib/orb/signal";
+import { evaluateHeikinAshi } from "@/lib/strategies/heikinashi";
 import { DEFAULT_RISK, preTradeCheck, buildTradePlan, type RiskState } from "@/lib/orb/risk";
 
 export const dynamic = "force-dynamic";
@@ -48,7 +49,11 @@ export async function POST(request: Request) {
     state.equity = account.equity;
 
     const session = await assembleLiveSession();
-    const sig = evaluateSignal(session.today, session.history, session.macro);
+    const strategy = b.strategy === "heikinashi" ? "heikinashi" : "orb";
+    const sig =
+      strategy === "heikinashi"
+        ? evaluateHeikinAshi([...session.history, ...session.today].slice(-300))
+        : evaluateSignal(session.today, session.history, session.macro);
 
     const cfg = { ...DEFAULT_RISK, riskFractionOfEquity: b.riskFraction ?? DEFAULT_RISK.riskFractionOfEquity };
     const check = preTradeCheck(state, cfg);
@@ -78,6 +83,7 @@ export async function POST(request: Request) {
     return Response.json({
       ok: true,
       mode: broker.mode,
+      strategy,
       account,
       signal: sig,
       action,
