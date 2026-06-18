@@ -23,6 +23,11 @@ its working**.
 | **/orb** | ASX200 pre-bell **opening-range-breakout** signaller: a guided 5-factor checklist (live overnight macro gate + intraday confirmation), the conditional win-rate stack, a hard **GO / NO-TRADE** verdict, and a leverage-aware position/risk calculator with an honest ruin reality-check. |
 | **/methodology** | Every formula and weight, written out. |
 
+**Backtests:** [`BACKTEST.md`](BACKTEST.md) (ODTE direction model) and
+[`ORB-BACKTEST.md`](ORB-BACKTEST.md) (the ASX200 ORB "$100→$1m" plan — a Monte
+Carlo stress-test + a real-data check of the overnight-macro base layer, with
+honest caveats about what intraday data we can't get).
+
 ## The models (see `/methodology` in-app for full detail)
 
 - **Composite score** = `0.30·Value + 0.25·Momentum + 0.20·Quality + 0.15·Technicals + 0.10·Sentiment`
@@ -89,7 +94,6 @@ Analysis engine is in `src/lib/analysis/*` (pure functions, easy to extend/test)
 data providers in `src/lib/providers/*`; orchestration in `src/lib/engine.ts`.
 
 ## Extending
-
 - Add tickers in `src/lib/universe.ts`.
 - Tune factor weights in `src/lib/analysis/score.ts`, valuation blend in
   `src/lib/analysis/valuation.ts`, and ODTE priors in `src/lib/analysis/odte.ts`.
