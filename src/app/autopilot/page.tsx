@@ -15,6 +15,7 @@ export default function AutopilotPage() {
   const [live, setLive] = useState(false);
   const [strategy, setStrategy] = useState<"orb" | "heikinashi">("orb");
   const [dataSymbol, setDataSymbol] = useState("ES=F");
+  const [capital, setCapital] = useState("");
 
   // ---- arming / consent ----
   const [sendRealOrders, setSendRealOrders] = useState(false);
@@ -49,7 +50,7 @@ export default function AutopilotPage() {
     try {
       const res = await fetch("/api/ig/run", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...creds, strategy, dataSymbol, sendRealOrders, confirmPhrase }),
+        body: JSON.stringify({ ...creds, strategy, dataSymbol, capital: capital ? Number(capital) : 0, sendRealOrders, confirmPhrase }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
@@ -188,6 +189,21 @@ export default function AutopilotPage() {
             </p>
           </div>
         )}
+        <div>
+          <div className="text-xs text-[var(--color-muted)] mb-1.5">Capital to deploy</div>
+          <div className="flex items-center gap-2">
+            <span className="text-[var(--color-muted)]">$</span>
+            <input type="number" value={capital} onChange={(e) => setCapital(e.target.value)}
+              placeholder={account ? `${account.equity} (full balance)` : "full balance"}
+              className="w-48 px-3 py-2 rounded-lg panel-2 border border-[var(--color-border)] mono text-sm focus:outline-none focus:border-[var(--color-accent)]" />
+            <span className="text-[11px] text-[var(--color-muted)]">
+              How much the bot sizes from. Blank = full balance. Capped at your real balance.
+              {account && capital && Number(capital) > account.equity && (
+                <strong className="text-[var(--color-warn)]"> Above your balance — will be capped at ${account.equity}.</strong>
+              )}
+            </span>
+          </div>
+        </div>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={sendRealOrders} onChange={(e) => setSendRealOrders(e.target.checked)} />
           Actually place orders ({live ? "real money" : "real demo orders"}). Off = dry-run (logs the order, sends nothing).

@@ -46,7 +46,11 @@ export async function POST(request: Request) {
     }
 
     const account = await broker.getAccount();
-    state.equity = account.equity;
+    // Capital to deploy: how much of the account the bot sizes from. Blank/0 =
+    // full balance; otherwise capped at the real balance (can't deploy more
+    // than you have).
+    const capital = Number(b.capital) > 0 ? Math.min(Number(b.capital), account.equity) : account.equity;
+    state.equity = capital;
 
     const strategy = b.strategy === "heikinashi" ? "heikinashi" : "orb";
     let sig;
@@ -94,6 +98,7 @@ export async function POST(request: Request) {
       strategy,
       dataSymbol: strategy === "heikinashi" ? b.dataSymbol || "^AXJO" : undefined,
       account,
+      capitalDeployed: capital,
       signal: sig,
       action,
       detail,
