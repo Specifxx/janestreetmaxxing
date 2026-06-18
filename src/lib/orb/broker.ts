@@ -184,6 +184,26 @@ export class IGBroker implements Broker {
     };
   }
 
+  // Search IG's market list — shows what's tradeable RIGHT NOW (marketStatus)
+  // and whether each is an undated CFD ("DFB") or a dated "futures" contract.
+  async searchMarkets(term: string): Promise<
+    { epic: string; name: string; type: string; expiry: string; status: string }[]
+  > {
+    await this.login();
+    const res = await fetch(`${this.base}/markets?searchTerm=${encodeURIComponent(term)}`, {
+      headers: this.headers("1"),
+    });
+    if (!res.ok) throw new Error(`IG market search failed: ${res.status}`);
+    const body: any = await res.json();
+    return (body.markets ?? []).map((m: any) => ({
+      epic: m.epic,
+      name: m.instrumentName,
+      type: m.instrumentType,
+      expiry: m.expiry,
+      status: m.marketStatus,
+    }));
+  }
+
   async openPosition(plan: TradePlan): Promise<Position> {
     await this.login();
 
