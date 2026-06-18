@@ -1,5 +1,5 @@
 import { IGBroker } from "@/lib/orb/broker";
-import { assembleLiveSession } from "@/lib/orb/data";
+import { assembleLiveSession, fetch5m } from "@/lib/orb/data";
 import { evaluateSignal } from "@/lib/orb/signal";
 import { evaluateHeikinAshi } from "@/lib/strategies/heikinashi";
 import { DEFAULT_RISK, preTradeCheck, buildTradePlan, type RiskState } from "@/lib/orb/risk";
@@ -48,12 +48,20 @@ export async function POST(request: Request) {
     const account = await broker.getAccount();
     state.equity = account.equity;
 
-    const session = await assembleLiveSession();
     const strategy = b.strategy === "heikinashi" ? "heikinashi" : "orb";
-    const sig =
-      strategy === "heikinashi"
-        ? evaluateHeikinAshi([...session.history, ...session.today].slice(-300))
-        : evaluateSignal(session.today, session.history, session.macro);
+    let sig;
+    if (strategy === "heikinashi") {
+      // Decoupled from the ASX: Heikin Ashi runs on any market's 5-min series.
+      // Default ^AXJO; pass dataSymbol (e.g. ES=F, NQ=F, GC=F) to run a ~24/5
+      // futures market right now. (FX has no Yahoo volume, so the volume
+      // oscillator won't fire — stick to index/commodity futures.)
+      const bars = await fetch5m(b.dataSymbol || "^AXJO");
+      sig = evaluateHeikinAshi(bars.slice(-300));
+    } else {
+      // ORB is ASX-specific (built around the 10:00 AEST open).
+      const session = await assembleLiveSession();
+      sig = evaluateSignal(session.today, session.history, session.macro);
+    }
 
     const cfg = { ...DEFAULT_RISK, riskFractionOfEquity: b.riskFraction ?? DEFAULT_RISK.riskFractionOfEquity };
     const check = preTradeCheck(state, cfg);
@@ -84,6 +92,7 @@ export async function POST(request: Request) {
       ok: true,
       mode: broker.mode,
       strategy,
+      dataSymbol: strategy === "heikinashi" ? b.dataSymbol || "^AXJO" : undefined,
       account,
       signal: sig,
       action,

@@ -14,6 +14,7 @@ export default function AutopilotPage() {
   const [epic, setEpic] = useState("IX.D.ASX.IFD.IP");
   const [live, setLive] = useState(false);
   const [strategy, setStrategy] = useState<"orb" | "heikinashi">("orb");
+  const [dataSymbol, setDataSymbol] = useState("ES=F");
 
   // ---- arming / consent ----
   const [sendRealOrders, setSendRealOrders] = useState(false);
@@ -48,7 +49,7 @@ export default function AutopilotPage() {
     try {
       const res = await fetch("/api/ig/run", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...creds, strategy, sendRealOrders, confirmPhrase }),
+        body: JSON.stringify({ ...creds, strategy, dataSymbol, sendRealOrders, confirmPhrase }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
@@ -156,10 +157,37 @@ export default function AutopilotPage() {
           </div>
           <p className="text-[11px] text-[var(--color-muted)] mt-1.5">
             {strategy === "orb"
-              ? "Opening-range breakout, one setup/day around 10:30 AEST."
-              : "Enters on a Heikin-Ashi trend flip confirmed by an expanding volume oscillator. Runs on the 5-min series throughout the session."}
+              ? "Opening-range breakout, one setup/day around 10:30 AEST. ASX 200 only."
+              : "Enters on a Heikin-Ashi trend flip confirmed by an expanding volume oscillator. Runs on any market — pick one below to trade right now."}
           </p>
         </div>
+
+        {strategy === "heikinashi" && (
+          <div>
+            <div className="text-xs text-[var(--color-muted)] mb-1.5">Market (data feed)</div>
+            <div className="flex flex-wrap gap-1.5">
+              {([
+                { v: "ES=F", label: "S&P 500" },
+                { v: "NQ=F", label: "Nasdaq 100" },
+                { v: "YM=F", label: "Dow 30" },
+                { v: "GC=F", label: "Gold" },
+                { v: "CL=F", label: "Crude Oil" },
+                { v: "^AXJO", label: "ASX 200" },
+              ] as const).map((m) => (
+                <button key={m.v} onClick={() => setDataSymbol(m.v)}
+                  className={`px-3 py-1.5 rounded-lg text-sm border transition ${
+                    dataSymbol === m.v ? "bg-[var(--color-accent)] border-[var(--color-accent)] text-white" : "panel-2 border-[var(--color-border)] text-[var(--color-muted)]"}`}>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-[var(--color-muted)] mt-1.5">
+              These are <strong className="text-[var(--color-text)]">~24/5 futures</strong> — tradeable outside ASX hours.
+              Set the <strong className="text-[var(--color-text)]">IG epic</strong> above to the matching market (find it with
+              <code className="mono"> scripts/ig-markets.ts</code>). The data feed and your IG instrument should track the same underlying.
+            </p>
+          </div>
+        )}
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={sendRealOrders} onChange={(e) => setSendRealOrders(e.target.checked)} />
           Actually place orders ({live ? "real money" : "real demo orders"}). Off = dry-run (logs the order, sends nothing).
