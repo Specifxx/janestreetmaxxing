@@ -61,48 +61,175 @@ export class PaperBroker implements Broker {
 }
 
 // ---------------------------------------------------------------------------
-// IGBroker — LIVE / DEMO adapter skeleton for IG Markets (popular in AU, has a
-// REST API and a free demo). It defaults to the DEMO endpoint. Going live
-// requires an explicit, scary env confirmation. It is intentionally minimal:
-// you MUST verify order placement on the DEMO account yourself before trusting
-// it — this code has not been run against a live exchange here.
+// IGBroker — LIVE / DEMO adapter for IG Markets (popular in AU, real REST API,
+// free demo on the SAME API). Defaults to the DEMO endpoint (virtual money).
+//
+// SAFETY MODEL — read before trusting this with money:
+//  - This code has NOT been run against IG's servers here (no creds, sandboxed
+//    network). You MUST verify it end-to-end on the DEMO account first.
+//  - Live mode requires env LIVE_TRADING_CONFIRMED=I_UNDERSTAND_I_CAN_LOSE_EVERYTHING.
+//  - Even once live, orders are DRY-RUN (logged, not sent) until you also set
+//    ORB_PLACE_REAL_ORDERS=yes. Two separate switches on purpose.
+//  - Before sending, it refuses any order whose worst-case loss exceeds the
+//    plan's intended max loss by >50% (e.g. because IG's min deal size forced a
+//    bigger position than $500 can safely carry).
 // ---------------------------------------------------------------------------
+interface IGOpts {
+  apiKey: string;
+  username: string;
+  password: string;
+  live: boolean;
+  epic: string; // IG instrument id for AUS200, e.g. "IX.D.ASX.IFD.IP" (verify in your account)
+  currency?: string;
+}
+
 export class IGBroker implements Broker {
   mode: "paper" | "live";
   private base: string;
-  constructor(
-    private opts: {
-      apiKey: string;
-      username: string;
-      password: string;
-      live: boolean;
-      epic: string; // IG instrument id for AUS200, e.g. "IX.D.ASX.IFD.IP"
-    },
-  ) {
+  private cst = "";
+  private xst = "";
+  private accountId = "";
+  private dryRun: boolean;
+
+  constructor(private opts: IGOpts) {
     const confirmed = process.env.LIVE_TRADING_CONFIRMED === "I_UNDERSTAND_I_CAN_LOSE_EVERYTHING";
     if (opts.live && !confirmed) {
       throw new Error(
         "Refusing to start a LIVE broker without informed consent.\n" +
           "Set env LIVE_TRADING_CONFIRMED=I_UNDERSTAND_I_CAN_LOSE_EVERYTHING to proceed,\n" +
-          "and only after the strategy has shown a real positive edge on the demo account.",
+          "and ONLY after the strategy has shown a real positive edge on the demo account.",
       );
     }
     this.mode = opts.live ? "live" : "paper";
     this.base = opts.live ? "https://api.ig.com/gateway/deal" : "https://demo-api.ig.com/gateway/deal";
+    // Orders are dry-run unless explicitly armed, even on a confirmed live account.
+    this.dryRun = process.env.ORB_PLACE_REAL_ORDERS !== "yes";
   }
+
+  private headers(version = "1"): Record<string, string> {
+    const h: Record<string, string> = {
+      "X-IG-API-KEY": this.opts.apiKey,
+      "Content-Type": "application/json",
+      Accept: "application/json; charset=UTF-8",
+      Version: version,
+    };
+    if (this.cst) h["CST"] = this.cst;
+    if (this.xst) h["X-SECURITY-TOKEN"] = this.xst;
+    return h;
+  }
+
+  private async login(): Promise<void> {
+    if (this.cst && this.xst) return;
+    const res = await fetch(`${this.base}/session`, {
+      method: "POST",
+      headers: this.headers("2"),
+      body: JSON.stringify({ identifier: this.opts.username, password: this.opts.password }),
+    });
+    if (!res.ok) throw new Error(`IG login failed: ${res.status} ${await res.text()}`);
+    this.cst = res.headers.get("CST") ?? "";
+    this.xst = res.headers.get("X-SECURITY-TOKEN") ?? "";
+    if (!this.cst || !this.xst) throw new Error("IG login returned no session tokens");
+    const body: any = await res.json();
+    this.accountId = body?.currentAccountId ?? "";
+  }
+
   async getAccount(): Promise<AccountInfo> {
-    // Real implementation: POST /session (v3) to get tokens, GET /accounts.
-    throw new Error(
-      "IGBroker.getAccount() is a documented stub. Implement the /session login + " +
-        "/accounts call against " + this.base + " and TEST IT ON DEMO before going live.",
-    );
+    await this.login();
+    const res = await fetch(`${this.base}/accounts`, { headers: this.headers("1") });
+    if (!res.ok) throw new Error(`IG /accounts failed: ${res.status}`);
+    const body: any = await res.json();
+    const acct =
+      (body.accounts ?? []).find((a: any) => a.accountId === this.accountId) ??
+      (body.accounts ?? []).find((a: any) => a.preferred) ??
+      body.accounts?.[0];
+    const balance = acct?.balance?.balance ?? 0;
+    return { equity: balance, currency: acct?.currency ?? this.opts.currency ?? "AUD", mode: this.mode };
   }
-  async openPosition(): Promise<Position> {
-    // Real implementation: POST /positions/otc with the epic, direction, size,
-    // and attached stopLevel + limitLevel (OCO) from the TradePlan.
-    throw new Error("IGBroker.openPosition() is a documented stub — implement + demo-test first.");
+
+  async openPosition(plan: TradePlan): Promise<Position> {
+    await this.login();
+
+    // 1. Pull dealing rules + a live snapshot so we size correctly.
+    const mres = await fetch(`${this.base}/markets/${encodeURIComponent(this.opts.epic)}`, {
+      headers: this.headers("3"),
+    });
+    if (!mres.ok) throw new Error(`IG /markets failed: ${mres.status}`);
+    const market: any = await mres.json();
+    const minSize = market?.dealingRules?.minDealSize?.value ?? 1;
+    const offer = market?.snapshot?.offer ?? plan.entryPrice;
+    const bid = market?.snapshot?.bid ?? plan.entryPrice;
+    const price = plan.direction === "long" ? offer : bid;
+
+    // 2. Size = notional / price, snapped UP to the broker minimum.
+    const rawSize = plan.notional / price;
+    const size = Math.max(minSize, Math.round(rawSize / minSize) * minSize);
+
+    // 3. SAFETY: if the snapped size makes the real worst-case loss much bigger
+    //    than intended, refuse. ($500 often can't meet index min deal sizes
+    //    without over-risking — this is the guard that catches that.)
+    const realMaxLoss = size * price * (this.optsStopFrac(plan));
+    if (realMaxLoss > plan.maxLossDollar * 1.5) {
+      throw new Error(
+        `Refusing order: min deal size (${minSize}) forces size ${size}, whose worst-case loss ` +
+          `≈ $${realMaxLoss.toFixed(2)} vs your intended $${plan.maxLossDollar.toFixed(2)}. ` +
+          `Your account is too small to trade this instrument at this risk. Lower leverage/size or pick a smaller-denomination market.`,
+      );
+    }
+
+    const order = {
+      epic: this.opts.epic,
+      expiry: "-",
+      direction: plan.direction === "long" ? "BUY" : "SELL",
+      size,
+      orderType: "MARKET",
+      guaranteedStop: false,
+      forceOpen: true,
+      currencyCode: this.opts.currency ?? "AUD",
+      stopLevel: round(plan.stopPrice),
+      limitLevel: round(plan.baseTpPrice),
+    };
+
+    if (this.dryRun) {
+      console.log(`[IG ${this.mode} DRY-RUN] Would place order:`, JSON.stringify(order));
+      console.log("  Set ORB_PLACE_REAL_ORDERS=yes to actually send. (Verify on DEMO first.)");
+      return this.posFrom("dryrun", plan);
+    }
+
+    // 4. Place + confirm.
+    const ores = await fetch(`${this.base}/positions/otc`, {
+      method: "POST",
+      headers: this.headers("2"),
+      body: JSON.stringify(order),
+    });
+    if (!ores.ok) throw new Error(`IG order rejected: ${ores.status} ${await ores.text()}`);
+    const { dealReference } = (await ores.json()) as any;
+    const cres = await fetch(`${this.base}/confirms/${dealReference}`, { headers: this.headers("1") });
+    const confirm: any = await cres.json();
+    if (confirm?.dealStatus !== "ACCEPTED") {
+      throw new Error(`IG deal not accepted: ${confirm?.reason ?? "unknown"}`);
+    }
+    return this.posFrom(confirm?.affectedDeals?.[0]?.dealId ?? dealReference, plan);
+  }
+
+  private optsStopFrac(plan: TradePlan): number {
+    return Math.abs(plan.entryPrice - plan.stopPrice) / plan.entryPrice;
+  }
+  private posFrom(id: string, plan: TradePlan): Position {
+    return {
+      id,
+      direction: plan.direction,
+      entryPrice: plan.entryPrice,
+      stopPrice: plan.stopPrice,
+      baseTpPrice: plan.baseTpPrice,
+      runnerTpPrice: plan.runnerTpPrice,
+    };
   }
   closeInfo() {
-    return "live exits via broker-side OCO stop/limit orders (must be verified on demo)";
+    return "live exits run broker-side via the attached OCO stop + limit (verify on demo). Runner scale-out is not yet automated.";
   }
 }
+
+function round(x: number): number {
+  return Math.round(x * 100) / 100;
+}
+

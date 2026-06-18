@@ -74,6 +74,10 @@ Difference). Plain things to know:
 
 - **Your Stake account can't do this.** Stake is share trading — no index CFDs,
   no leverage, no automation API.
+- **eToro can't be automated either.** eToro has **no public trading API** for
+  retail users — you cannot get an API key and place automated orders on your own
+  account. The only "eToro bots" are unofficial browser-scrapers that break its
+  terms and risk a ban. Don't use eToro for this.
 - **20× is the legal ceiling, not a choice.** ASIC caps retail index CFD leverage
   at 20:1.
 - **Brokers with automation, used in AU:**
@@ -93,21 +97,42 @@ Difference). Plain things to know:
 ## Part 3 — Going live (the deliberate, gated path)
 
 The bot talks to a `Broker` interface (`src/lib/orb/broker.ts`). `PaperBroker` is
-the default. To go live you:
+the default. The **`IGBroker` adapter is implemented** (login, balance, order
+placement with an attached OCO stop+limit) — but it has **not** been run against
+IG's servers from here, so you must verify it yourself on demo.
 
-1. **Open a broker demo account** (e.g. IG demo) and get an API key.
-2. **Implement the two stubbed methods** in `IGBroker` (`getAccount`,
-   `openPosition`) against IG's REST API — login via `/session`, place orders via
-   `/positions/otc` with an attached OCO stop + limit. *Test every path on the
-   demo account.*
-3. Run the bot pointed at the **demo** for weeks. Reconcile its journal against
-   the broker's own trade history — they must match.
-4. Only then, switch to live by setting the env confirmation the code demands:
-   ```bash
-   export LIVE_TRADING_CONFIRMED=I_UNDERSTAND_I_CAN_LOSE_EVERYTHING
-   ```
-   This friction is intentional. If that sentence makes you hesitate, you aren't
-   ready to go live.
+**Step 1 — Connect to IG demo (read-only).** Open a free IG demo account, get a
+demo API key, then:
+```bash
+export IG_API_KEY=...        # demo key
+export IG_USERNAME=...       # demo username
+export IG_PASSWORD=...       # demo password
+export IG_EPIC="IX.D.ASX.IFD.IP"   # verify the AUS200 epic inside YOUR account
+npx tsx scripts/ig-smoke-test.ts   # logs in, prints your demo balance. No orders.
+```
+
+**Step 2 — Let the bot trade the DEMO via IG:**
+```bash
+npx tsx scripts/orb-bot.ts --broker=ig            # demo endpoint, DRY-RUN orders
+npx tsx scripts/orb-bot.ts --broker=ig --loop     # auto, demo, dry-run
+```
+By default orders are **dry-run** (the exact order is logged, not sent). To send
+real *demo* orders, also `export ORB_PLACE_REAL_ORDERS=yes`. Run this for weeks
+and reconcile the journal against IG's own trade history — they must match.
+
+**Step 3 — Go live (real money).** Only after demo proves a real edge. Three
+separate switches must ALL be set — this friction is deliberate:
+```bash
+export LIVE_TRADING_CONFIRMED=I_UNDERSTAND_I_CAN_LOSE_EVERYTHING
+export ORB_PLACE_REAL_ORDERS=yes
+# real (not demo) IG API key/credentials in IG_API_KEY/IG_USERNAME/IG_PASSWORD
+npx tsx scripts/orb-bot.ts --broker=ig --live --loop
+```
+If that first sentence makes you hesitate, you aren't ready. The adapter also
+**refuses any order whose real worst-case loss exceeds your intended risk by
+>50%** — which, with \$500, it often will, because IG's minimum deal size for an
+index can force a bigger position than \$500 can safely carry. That rejection is
+information: the account may simply be too small to trade this at sane risk.
 
 ### Guardrails that are ON by default (`src/lib/orb/risk.ts`)
 - Risk only **25% of the account per trade**, not 100% (the spec's full

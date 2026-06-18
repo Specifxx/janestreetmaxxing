@@ -27,12 +27,28 @@ import {
   applyOutcome,
   type RiskState,
 } from "@/lib/orb/risk";
-import { PaperBroker } from "@/lib/orb/broker";
+import { PaperBroker, IGBroker, type Broker } from "@/lib/orb/broker";
 
 const JOURNAL = process.env.ORB_JOURNAL || "orb-journal.json";
 const START_EQUITY = Number(process.env.ORB_EQUITY || 500);
 const DEMO = process.argv.includes("--demo-data");
 const LOOP = process.argv.includes("--loop");
+const USE_IG = process.argv.includes("--broker=ig");
+const GO_LIVE = process.argv.includes("--live");
+
+function makeBroker(equity: number): Broker {
+  if (!USE_IG) return new PaperBroker(equity, "AUD");
+  // IG path: demo by default; --live (plus the env confirmations in IGBroker)
+  // is required to touch real money, and orders stay dry-run until armed.
+  return new IGBroker({
+    apiKey: process.env.IG_API_KEY ?? "",
+    username: process.env.IG_USERNAME ?? "",
+    password: process.env.IG_PASSWORD ?? "",
+    live: GO_LIVE,
+    epic: process.env.IG_EPIC ?? "IX.D.ASX.IFD.IP",
+    currency: "AUD",
+  });
+}
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
@@ -42,7 +58,7 @@ interface JournalEntry {
   date: string;
   mode: string;
   direction: string;
-  outcome: "base" | "runner" | "loss" | "no-trade";
+  outcome: "base" | "runner" | "loss" | "no-trade" | "opened";
   reason: string;
   equityAfter: number;
 }
@@ -157,7 +173,19 @@ function resolvePaper(
 // ---- One evaluation cycle --------------------------------------------------
 async function runOnce() {
   const j = loadJournal();
-  const broker = new PaperBroker(j.equity, "AUD");
+  const broker = makeBroker(j.equity);
+  // For a live/demo broker, trust the broker's real balance over the journal.
+  if (broker.mode !== "paper") {
+    try {
+      const acct = await broker.getAccount();
+      j.equity = acct.equity;
+      j.state.equity = acct.equity;
+      console.log(`Broker account: ${acct.equity} ${acct.currency} (mode=${broker.mode})`);
+    } catch (e) {
+      console.error(`✗ Broker connect failed: ${e instanceof Error ? e.message : e}`);
+      return;
+    }
+  }
 
   let today: Bar5m[], history: Bar5m[], macro: OvernightMacro;
   if (DEMO) {
@@ -199,21 +227,30 @@ async function runOnce() {
   }
 
   const plan = buildTradePlan(sig.direction, sig.entryPrice, j.state, DEFAULT_RISK);
-  await broker.openPosition(plan);
-  const entryIdx = today.findIndex((b) => b.close === sig.entryPrice);
-  const outcome = resolvePaper(entryIdx, today, plan);
-  j.state = applyOutcome(j.state, DEFAULT_RISK, outcome);
-  j.equity = j.state.equity;
-  broker.setEquity(j.equity);
-  j.trades.push({ date: new Date().toISOString(), mode: broker.mode, direction: sig.direction, outcome, reason: sig.reason, equityAfter: j.equity });
-  saveJournal(j);
+  const pos = await broker.openPosition(plan);
 
-  console.log(`→ ${broker.mode.toUpperCase()} ${sig.direction.toUpperCase()} @ ${sig.entryPrice} | outcome=${outcome} | equity now $${j.equity.toFixed(2)}`);
-  if (j.state.halted) console.log(`⛔ Bot halted: ${j.state.haltReason}`);
+  if (broker instanceof PaperBroker) {
+    // Paper: resolve synthetically against the rest of today's real prices.
+    const entryIdx = today.findIndex((b) => b.close === sig.entryPrice);
+    const outcome = resolvePaper(entryIdx, today, plan);
+    j.state = applyOutcome(j.state, DEFAULT_RISK, outcome);
+    j.equity = j.state.equity;
+    broker.setEquity(j.equity);
+    j.trades.push({ date: new Date().toISOString(), mode: broker.mode, direction: sig.direction, outcome, reason: sig.reason, equityAfter: j.equity });
+    saveJournal(j);
+    console.log(`→ PAPER ${sig.direction.toUpperCase()} @ ${sig.entryPrice} | outcome=${outcome} | equity now $${j.equity.toFixed(2)}`);
+    if (j.state.halted) console.log(`⛔ Bot halted: ${j.state.haltReason}`);
+  } else {
+    // Live/demo: the broker holds the position with server-side OCO stop+limit.
+    // The outcome settles there; the next run reads the updated balance.
+    j.trades.push({ date: new Date().toISOString(), mode: broker.mode, direction: sig.direction, outcome: "opened", reason: `dealId ${pos.id}`, equityAfter: j.equity });
+    saveJournal(j);
+    console.log(`→ ${broker.mode.toUpperCase()} ${sig.direction.toUpperCase()} opened (id ${pos.id}). Exit handled broker-side by the attached stop/limit.`);
+  }
 
-  const settled = j.trades.filter((t) => t.outcome !== "no-trade");
+  const settled = j.trades.filter((t) => ["base", "runner", "loss"].includes(t.outcome));
   const wins = settled.filter((t) => t.outcome !== "loss").length;
-  if (settled.length) console.log(`Journal: ${settled.length} trades, win rate ${((wins / settled.length) * 100).toFixed(1)}%`);
+  if (settled.length) console.log(`Journal: ${settled.length} settled trades, win rate ${((wins / settled.length) * 100).toFixed(1)}%`);
 }
 
 async function main() {
