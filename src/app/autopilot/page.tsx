@@ -15,6 +15,7 @@ export default function AutopilotPage() {
   const [live, setLive] = useState(false);
   const [strategy, setStrategy] = useState<"orb" | "heikinashi">("orb");
   const [dataSymbol, setDataSymbol] = useState("ES=F");
+  const [timeframe, setTimeframe] = useState<"5m" | "15m" | "30m" | "60m">("30m");
   const [capital, setCapital] = useState("");
 
   // ---- arming / consent ----
@@ -50,7 +51,7 @@ export default function AutopilotPage() {
     try {
       const res = await fetch("/api/ig/run", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...creds, strategy, dataSymbol, capital: capital ? Number(capital) : 0, sendRealOrders, confirmPhrase }),
+        body: JSON.stringify({ ...creds, strategy, dataSymbol, timeframe, capital: capital ? Number(capital) : 0, sendRealOrders, confirmPhrase }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
@@ -63,9 +64,12 @@ export default function AutopilotPage() {
     finally { setBusy(false); }
   }
 
+  // Poll once per bar: ORB on 5-min, Heikin Ashi on its selected timeframe.
+  // (Polling faster than the bar would just re-fire the same flip.)
+  const pollMin = strategy === "orb" ? 5 : { "5m": 5, "15m": 15, "30m": 30, "60m": 60 }[timeframe];
   function toggleAuto() {
     if (auto) { if (timer.current) clearInterval(timer.current); timer.current = null; setAuto(false); }
-    else { runOnce(); timer.current = setInterval(runOnce, 5 * 60_000); setAuto(true); }
+    else { runOnce(); timer.current = setInterval(runOnce, pollMin * 60_000); setAuto(true); }
   }
   useEffect(() => () => { if (timer.current) clearInterval(timer.current); }, []);
 
@@ -187,6 +191,23 @@ export default function AutopilotPage() {
               Set the <strong className="text-[var(--color-text)]">IG epic</strong> above to the matching market (find it with
               <code className="mono"> scripts/ig-markets.ts</code>). The data feed and your IG instrument should track the same underlying.
             </p>
+
+            <div className="mt-3">
+              <div className="text-xs text-[var(--color-muted)] mb-1.5">Timeframe (candle size)</div>
+              <div className="flex flex-wrap gap-1.5">
+                {(["5m", "15m", "30m", "60m"] as const).map((tf) => (
+                  <button key={tf} onClick={() => setTimeframe(tf)}
+                    className={`px-3 py-1.5 rounded-lg text-sm border transition ${
+                      timeframe === tf ? "bg-[var(--color-accent)] border-[var(--color-accent)] text-white" : "panel-2 border-[var(--color-border)] text-[var(--color-muted)]"}`}>
+                    {tf === "60m" ? "1h" : tf}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-[var(--color-muted)] mt-1.5">
+                Higher = fewer but cleaner signals. The auto-run checks once per candle (every {pollMin} min). 5m is noisy;
+                30m/1h are calmer.
+              </p>
+            </div>
           </div>
         )}
         <div>

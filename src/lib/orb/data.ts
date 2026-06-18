@@ -24,8 +24,18 @@ export function sydneyISO(epochSec: number): string {
   return `${g("year")}-${g("month")}-${g("day")}T${g("hour")}:${g("minute")}`;
 }
 
-export async function fetch5m(symbol: string): Promise<Bar5m[]> {
-  const data = await yahoo(`/v8/finance/chart/${encodeURIComponent(symbol)}?interval=5m&range=60d`);
+function rangeFor(interval: string): string {
+  switch (interval) {
+    case "1m": return "7d";
+    case "1d": return "2y";
+    default: return "60d"; // 2m/5m/15m/30m/60m/90m
+  }
+}
+
+export async function fetchIntraday(symbol: string, interval = "5m"): Promise<Bar5m[]> {
+  const data = await yahoo(
+    `/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${interval}&range=${rangeFor(interval)}`,
+  );
   const r = data?.chart?.result?.[0];
   const ts: number[] = r?.timestamp ?? [];
   const q = r?.indicators?.quote?.[0] ?? {};
@@ -42,6 +52,10 @@ export async function fetch5m(symbol: string): Promise<Bar5m[]> {
     });
   }
   return bars;
+}
+
+export async function fetch5m(symbol: string): Promise<Bar5m[]> {
+  return fetchIntraday(symbol, "5m");
 }
 
 export async function dailyPct(symbol: string): Promise<number> {

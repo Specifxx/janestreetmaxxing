@@ -1,5 +1,5 @@
 import { IGBroker } from "@/lib/orb/broker";
-import { assembleLiveSession, fetch5m } from "@/lib/orb/data";
+import { assembleLiveSession, fetchIntraday } from "@/lib/orb/data";
 import { evaluateSignal } from "@/lib/orb/signal";
 import { evaluateHeikinAshi } from "@/lib/strategies/heikinashi";
 import { DEFAULT_RISK, preTradeCheck, buildTradePlan, type RiskState } from "@/lib/orb/risk";
@@ -53,13 +53,14 @@ export async function POST(request: Request) {
     state.equity = capital;
 
     const strategy = b.strategy === "heikinashi" ? "heikinashi" : "orb";
+    const timeframe = ["5m", "15m", "30m", "60m"].includes(b.timeframe) ? b.timeframe : "5m";
     let sig;
     if (strategy === "heikinashi") {
-      // Decoupled from the ASX: Heikin Ashi runs on any market's 5-min series.
-      // Default ^AXJO; pass dataSymbol (e.g. ES=F, NQ=F, GC=F) to run a ~24/5
-      // futures market right now. (FX has no Yahoo volume, so the volume
-      // oscillator won't fire — stick to index/commodity futures.)
-      const bars = await fetch5m(b.dataSymbol || "^AXJO");
+      // Decoupled from the ASX: Heikin Ashi runs on any market's series at the
+      // chosen timeframe. Default ^AXJO; pass dataSymbol (e.g. ES=F, NQ=F, GC=F)
+      // to run a ~24/5 futures market right now. (FX has no Yahoo volume, so the
+      // volume oscillator won't fire — stick to index/commodity futures.)
+      const bars = await fetchIntraday(b.dataSymbol || "^AXJO", timeframe);
       sig = evaluateHeikinAshi(bars.slice(-300));
     } else {
       // ORB is ASX-specific (built around the 10:00 AEST open).
@@ -96,6 +97,7 @@ export async function POST(request: Request) {
       ok: true,
       mode: broker.mode,
       strategy,
+      timeframe: strategy === "heikinashi" ? timeframe : "5m",
       dataSymbol: strategy === "heikinashi" ? b.dataSymbol || "^AXJO" : undefined,
       account,
       capitalDeployed: capital,
