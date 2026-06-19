@@ -30,6 +30,21 @@ export default function AutopilotPage() {
   const [log, setLog] = useState<LogRow[]>([]);
   const [auto, setAuto] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const wake = useRef<{ release?: () => void } | null>(null);
+
+  // Keep the machine awake while auto-run is active (browser Screen Wake Lock).
+  async function keepAwake() {
+    try {
+      if (typeof navigator !== "undefined" && "wakeLock" in navigator) {
+        wake.current = await (navigator as unknown as { wakeLock: { request: (t: string) => Promise<{ release?: () => void }> } }).wakeLock.request("screen");
+      }
+    } catch { /* unsupported or denied — handled by the OS-settings hint */ }
+  }
+  function letSleep() {
+    try { wake.current?.release?.(); } catch { /* noop */ }
+    wake.current = null;
+  }
+  const wakeSupported = typeof navigator !== "undefined" && "wakeLock" in navigator;
 
   const liveArmed = live && sendRealOrders;
   const liveReady = !liveArmed || confirmPhrase === LIVE_PHRASE;
@@ -68,10 +83,16 @@ export default function AutopilotPage() {
   // (Polling faster than the bar would just re-fire the same flip.)
   const pollMin = strategy === "orb" ? 5 : { "5m": 5, "15m": 15, "30m": 30, "60m": 60 }[timeframe];
   function toggleAuto() {
-    if (auto) { if (timer.current) clearInterval(timer.current); timer.current = null; setAuto(false); }
-    else { runOnce(); timer.current = setInterval(runOnce, pollMin * 60_000); setAuto(true); }
+    if (auto) { if (timer.current) clearInterval(timer.current); timer.current = null; setAuto(false); letSleep(); }
+    else { runOnce(); timer.current = setInterval(runOnce, pollMin * 60_000); setAuto(true); keepAwake(); }
   }
-  useEffect(() => () => { if (timer.current) clearInterval(timer.current); }, []);
+  // Re-acquire the wake lock when returning to the tab (browsers drop it when hidden).
+  useEffect(() => {
+    const onVis = () => { if (document.visibilityState === "visible" && auto && !wake.current) keepAwake(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [auto]);
+  useEffect(() => () => { if (timer.current) clearInterval(timer.current); letSleep(); }, []);
 
   const canRun = !!apiKey && !!username && !!password && liveReady && !busy;
   const field = "w-full px-3 py-2 rounded-lg panel-2 border border-[var(--color-border)] mono text-sm focus:outline-none focus:border-[var(--color-accent)]";
@@ -250,6 +271,14 @@ export default function AutopilotPage() {
           </button>
           {auto && <span className="text-xs text-[var(--color-up)] animate-pulse">● running — keep this tab open</span>}
         </div>
+        {auto && (
+          <div className="text-xs text-[var(--color-muted)]">
+            {wakeSupported
+              ? "🔒 Keeping your screen awake while the bot runs (browser wake lock)."
+              : "⚠ This browser can't hold a wake lock — set your OS power plan to ‘never sleep’ to keep it running."}
+            {" "}Closing the laptop lid still sleeps it — for true 24/7, use a VPS.
+          </div>
+        )}
         {error && <div className="text-sm text-[var(--color-down)]">✗ {error}</div>}
       </section>
 
