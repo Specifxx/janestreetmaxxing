@@ -6,6 +6,7 @@ import type { TradePlan } from "@/lib/orb/risk";
 
 export interface AccountInfo {
   equity: number;
+  available?: number; // funds free for margin (can be < equity if positions are open)
   currency: string;
   mode: "paper" | "live";
 }
@@ -147,7 +148,8 @@ export class IGBroker implements Broker {
       (body.accounts ?? []).find((a: any) => a.preferred) ??
       body.accounts?.[0];
     const balance = acct?.balance?.balance ?? 0;
-    return { equity: balance, currency: acct?.currency ?? this.opts.currency ?? "AUD", mode: this.mode };
+    const available = acct?.balance?.available ?? balance;
+    return { equity: balance, available, currency: acct?.currency ?? this.opts.currency ?? "AUD", mode: this.mode };
   }
 
   // Read the instrument's dealing rules so you can see — from IG's own data —
@@ -204,7 +206,7 @@ export class IGBroker implements Broker {
     }));
   }
 
-  async openPosition(plan: TradePlan): Promise<Position> {
+  async openPosition(plan: TradePlan, availableFunds?: number): Promise<Position> {
     await this.login();
 
     // 1. Pull dealing rules + a live snapshot so we size correctly.
@@ -217,15 +219,34 @@ export class IGBroker implements Broker {
     const offer = market?.snapshot?.offer ?? plan.entryPrice;
     const bid = market?.snapshot?.bid ?? plan.entryPrice;
     const price = plan.direction === "long" ? offer : bid;
+    const marginFactorPct =
+      market?.instrument?.marginDepositBands?.[0]?.margin ??
+      (typeof market?.instrument?.marginFactor === "number" ? market.instrument.marginFactor : null);
 
-    // 2. Size = notional / price, snapped UP to the broker minimum.
+    // 2. Size = notional / price, snapped to the broker minimum.
     const rawSize = plan.notional / price;
-    const size = Math.max(minSize, Math.round(rawSize / minSize) * minSize);
+    let size = Math.max(minSize, Math.round(rawSize / minSize) * minSize);
 
-    // 3. SAFETY: if the snapped size makes the real worst-case loss much bigger
-    //    than intended, refuse. ($500 often can't meet index min deal sizes
-    //    without over-risking — this is the guard that catches that.)
-    const realMaxLoss = size * price * (this.optsStopFrac(plan));
+    // 3a. Cap size so required margin fits AVAILABLE funds (prevents IG
+    //     INSUFFICIENT_FUNDS). 95% buffer. If even the minimum won't fit, say so.
+    const marginFor = (s: number) =>
+      marginFactorPct != null ? s * price * (marginFactorPct / 100) : null;
+    if (marginFactorPct != null && availableFunds != null && availableFunds > 0) {
+      if ((marginFor(size) as number) > availableFunds * 0.95) {
+        const fit = Math.floor((availableFunds * 0.95) / (price * (marginFactorPct / 100)) / minSize) * minSize;
+        if (fit < minSize) {
+          throw new Error(
+            `Insufficient margin: one minimum position (${minSize}) needs ≈ $${(marginFor(minSize) as number).toFixed(0)} ` +
+              `but only $${availableFunds.toFixed(0)} is available on the account the API is using. ` +
+              `Check Connect shows the right balance, add demo funds, or pick a smaller-denomination market.`,
+          );
+        }
+        size = fit;
+      }
+    }
+
+    // 3b. SAFETY: refuse if the snapped size over-risks vs intent.
+    const realMaxLoss = size * price * this.optsStopFrac(plan);
     if (realMaxLoss > plan.maxLossDollar * 1.5) {
       throw new Error(
         `Refusing order: min deal size (${minSize}) forces size ${size}, whose worst-case loss ` +
@@ -233,6 +254,7 @@ export class IGBroker implements Broker {
           `Your account is too small to trade this instrument at this risk. Lower leverage/size or pick a smaller-denomination market.`,
       );
     }
+    const reqMargin = marginFor(size);
 
     const order: Record<string, unknown> = {
       epic: this.opts.epic,
@@ -261,12 +283,13 @@ export class IGBroker implements Broker {
       headers: this.headers("2"),
       body: JSON.stringify(order),
     });
-    if (!ores.ok) throw new Error(`IG order rejected: ${ores.status} ${await ores.text()}`);
+    if (!ores.ok) throw new Error(`IG order rejected (size ${size}): ${ores.status} ${await ores.text()}`);
     const { dealReference } = (await ores.json()) as any;
     const cres = await fetch(`${this.base}/confirms/${dealReference}`, { headers: this.headers("1") });
     const confirm: any = await cres.json();
     if (confirm?.dealStatus !== "ACCEPTED") {
-      throw new Error(`IG deal not accepted: ${confirm?.reason ?? "unknown"}`);
+      const m = reqMargin != null ? `, est. margin $${reqMargin.toFixed(0)}` : "";
+      throw new Error(`IG deal not accepted: ${confirm?.reason ?? "unknown"} (size ${size}${m})`);
     }
     return this.posFrom(confirm?.affectedDeals?.[0]?.dealId ?? dealReference, plan);
   }

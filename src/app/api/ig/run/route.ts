@@ -110,7 +110,9 @@ export async function POST(request: Request) {
       } else {
         const plan = buildTradePlan(sig.direction, sig.entryPrice, state, cfg, !flipExit);
         try {
-          const pos = await broker.openPosition(plan);
+          // Size to the lesser of deployed capital and the account's free funds.
+          const fundsCap = Math.min(capital, account.available ?? account.equity);
+          const pos = await broker.openPosition(plan, fundsCap);
           action = broker.mode === "live" && sendRealOrders ? "live-order" : sendRealOrders ? "demo-order" : "dry-run";
           detail = `${exits.length ? detail + "; " : ""}${action}: ${sig.direction.toUpperCase()} @ ${sig.entryPrice} (id ${pos.id})${flipExit ? " [stop only, flip-exit]" : ""}`;
           order = { ...plan, id: pos.id };

@@ -149,7 +149,13 @@ export default function AutopilotPage() {
 
         {account && (
           <div className="panel-2 p-4 text-sm space-y-2">
-            <div>✓ Connected · <span className="mono">{account.equity} {account.currency}</span> · mode <strong>{account.mode}</strong></div>
+            <div>
+              ✓ Connected · balance <span className="mono">{account.equity} {account.currency}</span>
+              {account.available != null && <> · available <span className="mono">{account.available}</span></>} · mode <strong>{account.mode}</strong>
+              {account.available != null && account.available < 100 && (
+                <strong className="text-[var(--color-down)]"> — this account has almost no free funds; the API may be on the wrong sub-account.</strong>
+              )}
+            </div>
             {market && (
               <div className="text-xs text-[var(--color-muted)] leading-relaxed">
                 {market.name} @ {market.price} · min deal size {market.minDealSize} → min exposure ≈ ${Math.round(market.minExposure)}
